@@ -1,0 +1,10 @@
+# 1. Load the compiled C code
+useDynLib(ergm.gwespmatch)
+
+# 2. Export your initialization function
+# This allows the main 'ergm' package to find your new term
+export(InitErgmTerm.gwespmatch)
+
+# 3. Import necessary packages
+import(ergm)
+import(network)

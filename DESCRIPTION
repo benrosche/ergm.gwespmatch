@@ -1,0 +1,19 @@
+Package: ergm.gwespmatch
+Type: Package
+Title: Custom ERGM Term: gwespmatch
+Version: 1.0
+Date: 2025-12-01
+Author: Benjamin Rosche <benrosche@nyu.edu>
+Maintainer: Benjamin Rosche <benrosche@nyu.edu>
+Description: Implements custom user term 'gwespmatch'.
+License: GPL-3
+Depends:
+    ergm,
+    network
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+LinkingTo:
+    ergm
+NeedsCompilation: yes
+RoxygenNote: 7.3.3
