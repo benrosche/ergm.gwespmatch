@@ -9,7 +9,8 @@ specified vertex attribute.  Supports all five directed shared-partner types
 and a curved-ERGM mode for jointly estimating the decay parameter.
 }
 \usage{
-gwespmatch(decay = 0, match, fixed = TRUE, cutoff = 30, type = "OTP")
+gwespmatch(decay = 0, match, fixed = TRUE, cutoff = 30, type = "OTP",
+           homophily = "triad")
 }
 \arguments{
   \item{decay}{Non-negative GWESP decay parameter \eqn{\alpha}.  Controls
@@ -17,8 +18,23 @@ gwespmatch(decay = 0, match, fixed = TRUE, cutoff = 30, type = "OTP")
     \code{fixed = FALSE} this is used as an initial value for estimation.}
 
   \item{match}{Character string naming the vertex attribute.  Only edges
-    where \code{attr[tail] == attr[head]} contribute to the statistic.
-    Shared-partner nodes \emph{k} are not required to share the attribute.}
+    where \code{attr[tail] == attr[head]} contribute to the statistic.}
+
+  \item{homophily}{Character string controlling whether the shared partner
+    \eqn{k} must also carry the same attribute value.
+    \describe{
+      \item{\code{"triad"} (default)}{\emph{All three} nodes must match: the
+        focal edge \eqn{(t,h)} \emph{and} the closing node \eqn{k}.  Only
+        homogeneous triads are counted.  This is the statistic of Grund &
+        Densley (2015) (\code{GWESP_MATCH}) and the "categorical
+        transitivity" of Hong et al. (2024).}
+      \item{\code{"dyad"}}{Only the focal edge \eqn{(t,h)} must match; the
+        closing node \eqn{k} is unconstrained.  A within-group tie counts as
+        closed even when the third party is out-group.}
+    }
+    With a single nominal attribute these are the only two possibilities: if
+    \eqn{x_t = x_h}, then \dQuote{\eqn{k} matches \eqn{t}} and \dQuote{\eqn{k}
+    matches \eqn{h}} are the same condition.}
 
   \item{fixed}{Logical (default \code{TRUE}).
     \itemize{
@@ -55,7 +71,13 @@ This term behaves like \code{\link[ergm]{gwesp}} but restricts the sum to
 \eqn{x_t = x_h}, where \eqn{x} is the \code{match} attribute.  Let
 \eqn{\alpha} denote the decay, \eqn{q = 1 - e^{-\alpha}}, and let
 \eqn{ESP(t,h)} be the number of shared partners of edge \eqn{(t,h)}
-under the chosen \code{type}.
+under the chosen \code{type} and \code{homophily} rule.
+
+With \code{homophily = "triad"} (the default) this is exactly Grund &
+Densley's (2015) \code{GWESP_MATCH} statistic, and -- at \code{decay = 0} --
+Hong et al.'s (2024) categorical transitivity.  It is equivalent to computing
+\code{\link[ergm]{gwesp}} on the subgraph induced by within-group edges, i.e.
+\code{F(~gwesp(decay, fixed = TRUE), ~nodematch(attr))}.
 
 \subsection{Statistic (\code{fixed = TRUE})}{
 Writing \eqn{D_l} for the number of matched edges with exactly \eqn{l}
@@ -100,6 +122,27 @@ statistic, so the fixed term is the collapse of the curved term at a fixed
 All five type codes are accepted but the statistic always uses common
 neighbours (equivalent to the UTP type in \code{\link[ergm]{gwesp}}).
 }
+}
+\references{
+Grund, T. U. and Densley, J. A. (2015). Ethnic Homophily and Triad Closure:
+Mapping Internal Gang Structure Using Exponential Random Graph Models.
+\emph{Journal of Contemporary Criminal Justice} 31(3), 354--370.
+
+Hong, C.-S., Paik, A., Ballakrishnen, S., Silver, C. and Boutcher, S. (2024).
+Categorical closure: Transitivity and identities in longitudinal networks.
+\emph{Social Networks} 79, 76--92.
+
+Hunter, D. R. (2007). Curved exponential family models for social networks.
+\emph{Social Networks} 29(2), 216--230.
+}
+\note{
+\strong{RTP and ergm's shared-partner cache.}  \code{gwespmatch} implements
+ergm's documented RTP rule (\eqn{k} is an RTP partner of \eqn{(i,j)} iff
+\eqn{i \leftrightarrow k \leftrightarrow j}).  ergm's own shared-partner cache
+miscomputes \emph{edgewise} RTP; \code{ergm}'s \code{dgwesp(type = "RTP")}
+agrees with \code{gwespmatch} only when called with
+\code{term.options = list(cache.sp = FALSE)}.  Bear this in mind when
+comparing the two.
 }
 \author{Benjamin Rosche \email{benrosche@nyu.edu}}
 \seealso{\code{\link[ergm]{gwesp}}, \code{\link[ergm]{nodematch}}}

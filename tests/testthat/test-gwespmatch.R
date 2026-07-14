@@ -84,8 +84,12 @@ test_that("gwespmatch equals 1 for minimal directed OTP triangle (any decay)", {
 #
 #    Undirected ({1,2}, {1,3}, {2,3}):
 #      {1,2} and {1,3} are cross-group -> skip (no contribution from them).
-#      {2,3} is matched; common neighbour = 1, L2=1, g(1)=1.0.
-#      => gwespmatch = 1.0  (not 3.0, which would be the all-same-group value)
+#      {2,3} is matched, and its only shared partner is node 1 -- who is in a
+#      DIFFERENT group.  This is precisely where the two homophily rules part:
+#        homophily = "triad" (default): k must match too  -> 0
+#          (Grund & Densley 2015; Hong et al. 2024: "only triads where all
+#           three nodes have the same attribute")
+#        homophily = "dyad": only the focal edge must match -> 1.0
 # ---------------------------------------------------------------------------
 test_that("gwespmatch ignores edges between nodes of different groups", {
   edges_tri <- matrix(c(1, 2,
@@ -93,17 +97,28 @@ test_that("gwespmatch ignores edges between nodes of different groups", {
                         3, 2), nrow = 3, byrow = TRUE)
   grp_mixed <- c(2, 1, 1)
 
-  # Directed: only matched edge has no OTP partners -> 0
+  # Directed: only matched edge has no OTP partners -> 0 either way
   net_d <- make_net(3, edges = edges_tri, grp = grp_mixed)
   expect_equal(as.numeric(summary(net_d ~ gwespmatch(1.5, match = "grp"))),
                0, tolerance = 1e-10)
 
-  # Undirected: only {2,3} is matched; node 1 is a shared partner -> 1.0
   net_u <- make_net_u(3,
                       edges = matrix(c(1, 2, 1, 3, 2, 3), nrow = 3, byrow = TRUE),
                       grp   = grp_mixed)
-  expect_equal(as.numeric(summary(net_u ~ gwespmatch(1.5, match = "grp"))),
-               1.0, tolerance = 1e-10)
+
+  # triad (default): the closing node is out-group, so the triad is NOT
+  # homogeneous -> 0
+  expect_equal(
+    as.numeric(summary(net_u ~ gwespmatch(1.5, match = "grp"))),
+    0, tolerance = 1e-10)
+  expect_equal(
+    as.numeric(summary(net_u ~ gwespmatch(1.5, match = "grp", homophily = "triad"))),
+    0, tolerance = 1e-10)
+
+  # dyad: only the focal edge {2,3} must match; node 1 still counts -> 1.0
+  expect_equal(
+    as.numeric(summary(net_u ~ gwespmatch(1.5, match = "grp", homophily = "dyad"))),
+    1.0, tolerance = 1e-10)
 })
 
 # ---------------------------------------------------------------------------

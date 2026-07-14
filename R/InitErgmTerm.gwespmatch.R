@@ -1,15 +1,22 @@
 InitErgmTerm.gwespmatch <- function(nw, arglist, ...) {
 
   a <- check.ErgmTerm(nw, arglist,
-                      varnames      = c("decay", "fixed", "cutoff", "type", "match"),
-                      vartypes      = c("numeric", "logical", "numeric", "character", "character"),
-                      defaultvalues = list(0, TRUE, 30, "OTP", NULL),
-                      required      = c(TRUE, FALSE, FALSE, FALSE, TRUE))
+                      varnames      = c("decay", "fixed", "cutoff", "type", "match", "homophily"),
+                      vartypes      = c("numeric", "logical", "numeric", "character", "character", "character"),
+                      defaultvalues = list(0, TRUE, 30, "OTP", NULL, "triad"),
+                      required      = c(TRUE, FALSE, FALSE, FALSE, TRUE, FALSE))
 
   match_attr <- a$match
   node_attr  <- get.vertex.attribute(nw, match_attr)
   if (!is.numeric(node_attr))
     node_attr <- as.numeric(as.factor(node_attr))
+
+  # homophily: does the shared partner k also have to match?
+  #   "triad" (default): all three nodes share the attribute value.
+  #                      Grund & Densley (2015); Hong et al. (2024).
+  #   "dyad"           : only the focal edge (tail,head) matches; k is free.
+  homophily <- match.arg(tolower(a$homophily), c("triad", "dyad"))
+  match_k   <- if (homophily == "triad") 1 else 0
 
   # Directed type code (ergm convention: OTP=1 ITP=2 RTP=3 OSP=4 ISP=5).
   # Undirected networks always use common neighbours; type_code = 0.
@@ -19,13 +26,15 @@ InitErgmTerm.gwespmatch <- function(nw, arglist, ...) {
     if (is.na(type_code))
       stop(paste0("gwespmatch: invalid type '", a$type,
                   "'. Choose from OTP, ITP, RTP, OSP, ISP."))
+    sp_type <- toupper(a$type)
   } else {
     type_code <- 0L
+    sp_type   <- "UTP"
   }
 
   # INPUT_PARAM layout shared by both C functions:
-  #   [decay_or_cutoff, type_code, attr_1, ..., attr_N]
-  base_inputs <- c(type_code, node_attr)
+  #   [decay_or_cutoff, type_code, match_k, attr_1, ..., attr_N]
+  base_inputs <- c(type_code, match_k, node_attr)
 
   if (a$fixed) {
     # -----------------------------------------------------------------------
@@ -33,8 +42,7 @@ InitErgmTerm.gwespmatch <- function(nw, arglist, ...) {
     # C function: s_gwespmatch / c_gwespmatch
     # -----------------------------------------------------------------------
     inputs    <- c(a$decay, base_inputs)
-    coef.name <- paste("gwespmatch", match_attr, a$decay,
-                       if (is.directed(nw)) toupper(a$type) else "UTP",
+    coef.name <- paste("gwespmatch", match_attr, a$decay, sp_type, homophily,
                        sep = ".")
 
     list(
@@ -53,11 +61,10 @@ InitErgmTerm.gwespmatch <- function(nw, arglist, ...) {
     # Returns `cutoff` statistics: esp_l = # matched edges with exactly l
     # shared partners (l = 1..cutoff).
     # -----------------------------------------------------------------------
-    cutoff  <- as.integer(a$cutoff)
-    inputs  <- c(cutoff, base_inputs)
-    sp_type <- if (is.directed(nw)) toupper(a$type) else "UTP"
+    cutoff <- as.integer(a$cutoff)
+    inputs <- c(cutoff, base_inputs)
 
-    coef.names <- paste0("esp.", sp_type, "#", seq_len(cutoff))
+    coef.names <- paste0("esp.", sp_type, ".", homophily, "#", seq_len(cutoff))
 
     # Curved ERGM map:  theta_l = theta * exp(alpha) * (1 - (1-exp(-alpha))^l)
     # Parameters: x[1] = theta (freely estimated), x[2] = alpha = decay (>= 0)
@@ -78,7 +85,7 @@ InitErgmTerm.gwespmatch <- function(nw, arglist, ...) {
     }
 
     # params: NULL = freely estimated; numeric = initial value for decay
-    term_name <- paste("gwespmatch", match_attr, sep = ".")
+    term_name <- paste("gwespmatch", match_attr, homophily, sep = ".")
     params    <- setNames(list(NULL,    a$decay),
                           c(term_name, paste0(term_name, ".decay")))
 
