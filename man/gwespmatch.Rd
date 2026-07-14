@@ -138,11 +138,16 @@ Hunter, D. R. (2007). Curved exponential family models for social networks.
 \note{
 \strong{RTP and ergm's shared-partner cache.}  \code{gwespmatch} implements
 ergm's documented RTP rule (\eqn{k} is an RTP partner of \eqn{(i,j)} iff
-\eqn{i \leftrightarrow k \leftrightarrow j}).  ergm's own shared-partner cache
-miscomputes \emph{edgewise} RTP; \code{ergm}'s \code{dgwesp(type = "RTP")}
-agrees with \code{gwespmatch} only when called with
-\code{term.options = list(cache.sp = FALSE)}.  Bear this in mind when
-comparing the two.
+\eqn{i \leftrightarrow k \leftrightarrow j}) and computes it directly, without
+using ergm's shared-partner cache.
+
+ergm's shared-partner cache miscomputed \emph{edgewise} RTP; this was reported
+and fixed upstream in \url{https://github.com/statnet/ergm/pull/656}.  On ergm
+versions predating that fix, \code{dgwesp(type = "RTP")} and
+\code{desp(type = "RTP")} are unreliable by default and agree with
+\code{gwespmatch} only when called with
+\code{term.options = list(cache.sp = FALSE)}.  On fixed versions no special
+handling is needed.  \code{gwespmatch} itself is correct either way.
 }
 \author{Benjamin Rosche \email{benrosche@nyu.edu}}
 \seealso{\code{\link[ergm]{gwesp}}, \code{\link[ergm]{nodematch}}}

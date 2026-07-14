@@ -150,9 +150,11 @@ test_that("curved (fixed = FALSE) change statistics agree with summary", {
 # wrong; with cache.sp = FALSE ergm agrees with us.  This test pins our answer
 # to the definition, not to the buggy cache.
 # ---------------------------------------------------------------------------
-test_that("RTP matches ergm's documented definition (ergm's SP cache does not)", {
+test_that("RTP matches ergm's documented definition", {
   # 1->2, 2->1, 2->3, 3->1, 3->2, 4->1, 4->3
-  # mutual dyads: 1<->2 and 2<->3.  Edge 3->1 has RTP partner k=2 (3<->2<->1).
+  # mutual dyads: 1<->2 and 2<->3.  Edge 3->1 has RTP partner k=2 (3<->2<->1),
+  # so the documented answer is 1.  Note tail(3) > head(1) -- that is what
+  # triggered the ergm cache bug (statnet/ergm#656).
   A <- matrix(c(0,1,0,0,
                 1,0,1,0,
                 1,1,0,0,
@@ -162,17 +164,45 @@ test_that("RTP matches ergm's documented definition (ergm's SP cache does not)",
 
   expect_equal(as.numeric(summary(g ~ mutual)), 2)
 
-  # the correct answer, by the documented definition:
+  # What we actually care about: gwespmatch implements the documented rule.
   expect_equal(as.numeric(summary(g ~ gwespmatch(0, type = "RTP", match = "grp"))), 1)
 
-  # ergm agrees once its shared-partner cache is switched off ...
+  # ergm's UNCACHED path has always been correct, so this holds on every version.
   expect_equal(
     as.numeric(summary(g ~ dgwesp(0, fixed = TRUE, type = "RTP"),
                        term.options = list(cache.sp = FALSE))),
     1)
-  # ... and disagrees with itself when the cache is on (documents the ergm bug).
+})
+
+# ---------------------------------------------------------------------------
+# Forward-compatible probe for the upstream ergm bug (statnet/ergm#656):
+# ergm's shared-partner cache miscomputed edgewise RTP, returning 0 above.
+# We do NOT assert the bug -- that would make our suite fail the moment ergm
+# fixes it.  Instead we detect it, and once the installed ergm is fixed we
+# assert that gwespmatch agrees with ergm's DEFAULT (cached) path too.
+# ---------------------------------------------------------------------------
+test_that("gwespmatch agrees with ergm's default RTP path once ergm is fixed", {
+  A <- matrix(c(0,1,0,0,
+                1,0,1,0,
+                1,1,0,0,
+                1,0,1,0), 4, 4, byrow = TRUE)
+  g <- network(A, directed = TRUE)
+  g %v% "grp" <- rep(1, 4)
+
+  cached <- as.numeric(summary(g ~ dgwesp(0, fixed = TRUE, type = "RTP"),
+                               term.options = list(cache.sp = TRUE)))
+
+  if (!isTRUE(all.equal(cached, 1))) {
+    skip(paste0("Installed ergm ", packageVersion("ergm"),
+                " still has the edgewise-RTP shared-partner cache bug ",
+                "(statnet/ergm#656): cached dgwesp(RTP) = ", cached,
+                ", expected 1. gwespmatch is unaffected; it does not use ",
+                "ergm's SP cache. Compare against ergm using ",
+                "term.options = list(cache.sp = FALSE)."))
+  }
+
+  # ergm is fixed: its default path must now agree with us.
   expect_equal(
-    as.numeric(summary(g ~ dgwesp(0, fixed = TRUE, type = "RTP"),
-                       term.options = list(cache.sp = TRUE))),
-    0)
+    as.numeric(summary(g ~ gwespmatch(0, type = "RTP", match = "grp"))),
+    cached)
 })

@@ -5,6 +5,9 @@ useDynLib(ergm.gwespmatch)
 # This allows the main 'ergm' package to find your new term
 export(InitErgmTerm.gwespmatch)
 
+# The shared-partner cache auxiliary must also be visible to ergm's term lookup.
+export(InitErgmTerm..gwespmatch.spcache)
+
 # 3. Import necessary packages
 import(ergm)
 import(network)

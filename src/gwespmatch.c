@@ -1,4 +1,6 @@
 #include "ergm_userterms.h"
+#include "ergm_storage.h"
+#include "ergm_dyad_hashmap.h"
 #include <math.h>
 
 /*
@@ -101,10 +103,27 @@ static int count_undirected_esp(Vertex a, Vertex b,
     return count;
 }
 
-/* Count ESP for edge (a,b) dispatching on directedness. */
+/* Count ESP for edge (a,b) by brute force, dispatching on directedness.
+ * Used by the s_ (summary) functions, and as the reference implementation the
+ * cached change statistics are validated against. */
 #define COUNT_ESP(A, B) (DIRECTED                                            \
     ? count_directed_esp((A), (B), type, attrs, match_k, nwp)                \
     : count_undirected_esp((A), (B), attrs, match_k, nwp))
+
+/* O(1) shared-partner lookup from the auxiliary cache maintained by
+ * i__/u__gwespmatch_spcache (see gwespmatch_spcache.c).  The cache is built on
+ * the within-group subgraph when match_k is set, so it already counts only
+ * matching partners.
+ *
+ * Which getter to use depends on whether the cache for this type is a directed
+ * or an undirected map.  OTP is directed; ITP shares the OTP cache with the
+ * arguments reversed; UTP/OSP/ISP/RTP are undirected and MUST be read with
+ * GETUDMUI -- reading an undirected map with GETDDMUI silently returns 0
+ * whenever tail > head (this is the bug we fixed upstream in statnet/ergm#656). */
+#define CACHED_ESP(A, B)                                                     \
+  ((int)(type == 1 ? GETDDMUI((A), (B), spcache)   /* OTP: directed   */     \
+       : type == 2 ? GETDDMUI((B), (A), spcache)   /* ITP: OTP reversed */   \
+                   : GETUDMUI((A), (B), spcache))) /* UTP/OSP/ISP/RTP */
 
 /* =========================================================================
  * s_gwespmatch  –  summary statistic (fixed = TRUE, returns 1 value)
@@ -154,6 +173,7 @@ S_CHANGESTAT_FN(s_gwespmatch) {
  * current count L is affected by match_k, and COUNT_ESP handles that.
  * ========================================================================= */
 C_CHANGESTAT_FN(c_gwespmatch) {
+    GET_AUX_STORAGE(StoreStrictDyadMapUInt, spcache);
     const double  decay   = INPUT_PARAM[0];
     const int     type    = (int)INPUT_PARAM[1];
     const int     match_k = (int)INPUT_PARAM[2];
@@ -181,14 +201,14 @@ C_CHANGESTAT_FN(c_gwespmatch) {
     do {                                                                     \
         if (attrs[(A) - 1] == attrs[(B) - 1] &&                              \
             (!match_k || attrs[(P) - 1] == attrs[(A) - 1])) {                \
-            int _L = COUNT_ESP((A), (B));                                    \
+            int _L = CACHED_ESP((A), (B));                                   \
             cumchange += pow(q, _L - edgestate);                             \
         }                                                                    \
     } while (0)
 
     /* Part 1: the toggled edge's own term (only if it is itself matched). */
     if (matched_focal)
-        cumchange += exp(decay) * (1.0 - pow(q, COUNT_ESP(tail, head)));
+        cumchange += exp(decay) * (1.0 - pow(q, CACHED_ESP(tail, head)));
 
     Edge e; Vertex v;
 
@@ -334,6 +354,7 @@ S_CHANGESTAT_FN(s_gwespmatch_dist) {
  *   CHANGE_STAT[L+echange-1] += 1   (it enters bin L+echange)
  * ========================================================================= */
 C_CHANGESTAT_FN(c_gwespmatch_dist) {
+    GET_AUX_STORAGE(StoreStrictDyadMapUInt, spcache);
     const int     type    = (int)INPUT_PARAM[1];
     const int     match_k = (int)INPUT_PARAM[2];
     const double *attrs   = INPUT_PARAM + 3;
@@ -353,7 +374,7 @@ C_CHANGESTAT_FN(c_gwespmatch_dist) {
     do {                                                                     \
         if (attrs[(A) - 1] == attrs[(B) - 1] &&                              \
             (!match_k || attrs[(P) - 1] == attrs[(A) - 1])) {                \
-            int _L = COUNT_ESP((A), (B));                                    \
+            int _L = CACHED_ESP((A), (B));                                   \
             if (_L >= 1 && _L <= N_CHANGE_STATS) CHANGE_STAT[_L - 1] -= 1.0; \
             int _Ln = _L + echange;                                          \
             if (_Ln >= 1 && _Ln <= N_CHANGE_STATS) CHANGE_STAT[_Ln - 1] += 1.0; \
@@ -362,7 +383,7 @@ C_CHANGESTAT_FN(c_gwespmatch_dist) {
 
     /* Part 1: the toggled edge's own bin (only if it is itself matched). */
     if (matched_focal) {
-        int L_th = COUNT_ESP(tail, head);
+        int L_th = CACHED_ESP(tail, head);
         if (L_th >= 1 && L_th <= N_CHANGE_STATS) CHANGE_STAT[L_th - 1] += echange;
     }
 

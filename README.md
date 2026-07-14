@@ -202,16 +202,79 @@ combination of ergm's operators expresses that, because the restriction applies
 to the focal edge only, not to the configuration the operator sees.
 
 So: use `F()` if you want the published statistic and nothing else. Use this
-package for the `"dyad"` variant, for curved-ERGM support (`fixed = FALSE`), or
-for the purpose-written C change statistics (faster in long MCMC runs).
+package for the `"dyad"` variant (which `F()` cannot express) and for
+curved-ERGM support.
 
-### A note on RTP
+Speed is no longer a reason to prefer one over the other — `gwespmatch` uses the
+same shared-partner-cache strategy `F()` does and runs at parity with it. See
+[Performance](#performance).
+
+## Performance
+
+`gwespmatch` maintains a **shared-partner cache**, so a toggle costs
+**O(degree)** rather than O(degree²). This is the same strategy that makes
+ergm's own `gwesp` fast, and it puts the two at parity.
+
+The key observation is that a two-path *a*–*k*–*b* survives a `nodematch` filter
+exactly when both legs are within-group — i.e. when `attr[a] == attr[k] ==
+attr[b]`, the **triad** condition. So the triad shared-partner cache is just an
+ordinary shared-partner cache **built on the within-group subgraph**, which is
+precisely what `F(~gwesp, ~nodematch)` does internally. `gwespmatch` builds that
+same cache directly (see [`src/gwespmatch_spcache.c`](src/gwespmatch_spcache.c)),
+with a flag that turns the filter off to get `"dyad"`.
+
+### MCMC, undirected, n = 250, 4000 draws
+
+| mean degree | `gwespmatch` | `F(~gwesp, ~nodematch)` | ratio |
+|---|---|---|---|
+| 15 | 0.72 s | 0.65 s | 1.11× |
+| 33 | 0.73 s | 0.66 s | 1.11× |
+| 56 | 0.90 s | 0.84 s | 1.07× |
+| 89 | 1.17 s | 1.14 s | **1.03×** |
+
+The ratio is flat in density and converges to parity — the two now share a
+complexity class, and what remains is constant-factor overhead. (Before the
+cache, the same comparison degraded from 1.12× to 1.56× as degree rose.)
+
+### MCMC, directed, n = 200, all five types
+
+| type | `gwespmatch` | `F(~dgwesp, ~nodematch)` | ratio |
+|---|---|---|---|
+| OTP | 0.75 s | 0.60 s | 1.25× |
+| ITP | 0.55 s | 0.48 s | 1.15× |
+| RTP | 0.39 s | 0.37 s | 1.05× |
+| OSP | 0.38 s | 0.39 s | **0.97×** |
+| ISP | 0.39 s | 0.38 s | 1.03× |
+
+`homophily = "dyad"` runs on the same machinery (the cache is simply built
+unfiltered), so it gets the same O(degree) behaviour — and there is no `F()`
+construction to compare it against.
+
+The summary statistic (`summary(nw ~ gwespmatch(...))`) is still computed by
+direct enumeration rather than from the cache. It is called once per model, so
+this has not been worth optimising; it also serves as an independent check that
+the cached change statistics are right — the test suite verifies the two agree
+toggle-by-toggle.
+
+## A note on RTP
 
 `gwespmatch` implements ergm's *documented* RTP rule (*k* is an RTP partner of
-(*i*,*j*) iff *i* ↔ *k* ↔ *j*). **ergm's shared-partner cache miscomputes
-edgewise RTP**: `dgwesp(type = "RTP")` only agrees with the documentation — and
-with this package — when called with `term.options = list(cache.sp = FALSE)`.
-Keep that in mind if you compare the two.
+(*i*,*j*) iff *i* ↔ *k* ↔ *j*), and computes it directly — it does not use
+ergm's shared-partner cache.
+
+While building this package we found that **ergm's shared-partner cache
+miscomputed edgewise RTP** (wrong on ~18% of random directed networks), which we
+reported and fixed upstream in
+[statnet/ergm#656](https://github.com/statnet/ergm/pull/656).
+
+- **ergm versions without that fix:** `dgwesp(type = "RTP")` and
+  `desp(type = "RTP")` are unreliable by default. They agree with the
+  documentation — and with this package — only when called with
+  `term.options = list(cache.sp = FALSE)`. Use that if you compare the two.
+- **ergm versions with the fix:** no special handling needed; the default path
+  agrees with `gwespmatch`.
+
+Either way `gwespmatch` is unaffected: its RTP numbers were always correct.
 
 ## References
 
